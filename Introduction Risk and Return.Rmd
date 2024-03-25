@@ -1,0 +1,168 @@
+---
+title: "Untitled"
+author: "Stephan Röthlisberger"
+date: "2024-03-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r, comment=NA, include=FALSE, echo=FALSE}
+
+packs.inst <- c("readxl","foreign","dplyr","tidyr","ggplot2","stargazer","haven","Hmisc",
+           "lmtest","sandwich", "doBy", "multiwayvcov", "miceadds", 
+           "car", "purrr", "knitr", "zoo", "readstata13", "tidyverse", "psych",
+           "wesanderson", "lubridate","reporttools", "data.table", "devtools",
+           "rmarkdown","estimatr",  "Jmisc", "lfe", "plm", "tinytex", "xts", "psych", "PerformanceAnalytics",
+           "roll",  "glmnet", "hdm", "broom", "RCurl",  "maps", "fGarch", "remotes", "RPostgreSQL",  "DBI", "RPostgreSQL", "remotes", "RPostgres", "Rmisc", "ggthemes", "splitstackshape", "gginference", "MASS", "kableExtra"
+           )
+
+
+# Packages which were not found
+# "dummies", "ivpack", "rollRegres", "wrds", "learnr",
+
+plist <- packs.inst
+
+# Create loop to install or load selected packages
+for (p in plist) {
+  if (p %in% rownames(installed.packages()) == FALSE) {
+    install.packages(p)
+  }
+  eval(bquote(suppressWarnings(suppressMessages(library(.(p))))))
+}
+
+rm(p, plist)
+
+
+# lapply(packs.inst, install.packages, character.only = FALSE) 
+
+#lapply(packs.inst, require, character.only = TRUE)
+```
+
+# Risk and Return
+
+## Time Series Format
+
+When we deal with time siereis data set we have to mody first the format. Since we want to understand the development of securities over time.
+In order to use time-series in securitiy analysis, we first need to modify the data set into a time-series format. For that we need the packages `xts`.
+
+``` {r, include = FALSE}
+
+#load dataset 
+
+A1 <- read.csv("C:/Users/steph/Documents/Programmiersprache/Github/Data/A1_dataset_01_Ex_Session.txt", header = T, sep = "\t",  dec = '.')
+
+#head(A1)
+
+```
+
+```{r}
+# First, download dataset
+
+#Second, define the data column in the dataset as as.Date()
+date = as.Date(A1[,1])
+#date column is now an index! We need this to calculate 
+
+# Third, define time series format (xts)
+A1ts <- xts(x = A1[,-1], order.by = date)
+# -1 => all aport the first column
+# ordered.by the created date column
+
+# Print the Return
+#head(A1ts)
+
+```
+
+Be careful when using the function `lag()` because different packages use it (e.g dplyr, stats..). In this case write the packages before the command like `stats::lag()`. So, you can use the function lag() of the stats package.
+
+## Security Returns
+
+Here we focus on the percentage change in the price of a securities. This is called securities return.
+
+### Simple Returns
+
+The daily price return is the percentage change in the price of a security today relative to its price yesterday. 
+The formula can be written as followed:
+
+\begin{equation*}
+
+R_{i,t} = \frac{P_{i,t} - P_{i,t-1}}{P_{i,t-1}} = 
+\frac{P_{i,t}}{P_{i,t-1}} - 1
+
+\end{equation*}
+
+Where $R_{i,t}$ is the return of security i at time t, $P_{i,t}$ is the price of the security at time t.
+
+
+Calculate return of `return_bigfour`
+
+```{r, include=FALSE}
+
+#load dataset
+A1_bigfour <- read.csv("C:/Users/steph/Documents/Programmiersprache/Github/Data/A1_bigfour_Ex_real.csv", header = T, sep = ",",  dec = '.')
+
+#Overview of dataset
+#view()
+
+```
+
+```{r}
+
+# First load dataset
+
+# Second, define date as as.date()
+date_bf <- as.Date(dmy(A1_bigfour$Date))
+#if there is an error charToDate(x) use dmy()
+
+# Third, create xts format
+A1_bigfour_ts <- xts(x = A1_bigfour[,-1], order.by = date_bf)
+
+
+```
+
+An important feature of xts objects is the date configuration ability. That is, by writing the dates of interest in brackets next to the xts object, we can define the exact period of observation:
+
+```{r}
+
+A1_bigfour_ts['1988-06-30/1989-12-29'][c(1:5),c(1:2)]
+
+```
+
+Now, we can calculate the returns for each security. We do this in two ways: First, with the formula above, then with the function `ReturnCalculate()`
+
+```{r}
+
+# Calculate Returns for Roche
+## ALWAYS USE stats::lag(). THIS IS B/C DPLYR PACKAGE ASSUMES AN INCORRECT LAG WHEN BEING CALLED AND THUS THE MARKDOWN CANNOT BE RENDERED.
+
+## Manually
+A1_return_Roche_manual <- as.data.frame(A1_bigfour_ts$Roche_Holding / stats::lag(A1_bigfour_ts$Roche_Holding, 1) - 1)
+# Results will have NA for the first row (since the first element has no previous element to form a return).
+
+# Third, create xts format with new dataset
+A1_return_Roche_manual_ts <- xts(x = A1_return_Roche_manual, order.by = date_bf)
+
+## With function: Combination of the return calculate and xts function into one line
+# using Return.calculate
+A1_return_Roche_function <- xts(Return.calculate(A1_bigfour_ts$Roche_Holding, method =  "discrete"), order.by = date_bf)
+
+# Get the sum to ensure they are the same. We do this by an ifelse statement, stating that if both sums are identical, it prints a 1
+ifelse(mean(A1_return_Roche_function, na.rm = TRUE) == mean(A1_return_Roche_manual_ts, na.rm = TRUE), "Both calculations are identical", 0)
+
+```
+
+A small note here: As you may have noticed, the first return will always be a NA value, since there is no lagged parameter for the first price. As such, every time we work with data that has missing or NA values, we need to modify the calculus by using the argument na.rm = TRUE in a specific function.
+
+### Logarithmic Returns
+
+
+
+
