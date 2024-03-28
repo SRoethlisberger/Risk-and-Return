@@ -39,7 +39,7 @@ for (p in plist) {
   eval(bquote(suppressWarnings(suppressMessages(library(.(p))))))
 }
 
-rm(p, plist)
+rm(p, plist, packs.inst)
 
 
 # lapply(packs.inst, install.packages, character.only = FALSE) 
@@ -162,6 +162,289 @@ ifelse(mean(A1_return_Roche_function, na.rm = TRUE) == mean(A1_return_Roche_manu
 A small note here: As you may have noticed, the first return will always be a NA value, since there is no lagged parameter for the first price. As such, every time we work with data that has missing or NA values, we need to modify the calculus by using the argument na.rm = TRUE in a specific function.
 
 ### Logarithmic Returns
+
+Log returns are an approx of equal simple returns if volatility structure is relativly low (impling no large jumps between periods). We know that volatility is higher for riskier assets and longer horizont.
+
+$$ R_{i,t} = log(P_{i,t} - log(P_{i,t-1}) $$
+
+Advantage on log returns are the are addititive. This means we can state the sum of normally distributed will remain normal distributed (if they are not correlated). Consequently we can still rely on many statistically test that need normal distribution compared to multiplicative properties.
+
+```{r}
+
+# Let's calculate the log returns for Roche
+
+## Manualy
+
+A1_log_return_Roche_manual_ts <- xts(log(A1_bigfour_ts$Roche_Holding) - log(stats::lag(A1_bigfour_ts$Roche_Holding,1)), order.by = date_bf)
+
+## With function
+
+A1_log_return_Roche_function_ts <- xts((Return.calculate(A1_bigfour_ts$Roche_Holding, method = "log")), order.by = date_bf)
+
+# Get the sum to ensure they are the same. We do this by an ifelse statement, stating that if both sums are identical, it prints a 1
+
+ifelse(mean(A1_log_return_Roche_manual_ts, na.rm = T) == mean(A1_log_return_Roche_function_ts, na.rm = T), "Both calculation identical",0)
+
+
+```
+
+```{r}
+
+# We can also compare both simple and log returns:
+# Combine row of the vectors
+
+Roche_log_simple = as.data.frame(
+  rbind(mean(A1_return_Roche_manual_ts, na.rm = T), mean(A1_log_return_Roche_manual_ts, na.rm = T))
+)
+
+# Define columnnames and rownames
+colnames(Roche_log_simple) = c("Return Roche")
+rownames(Roche_log_simple) = c("Mean Return Simple", "Mean Return Log")
+
+Roche_log_simple
+
+
+```
+
+### Accounting for Dividents: Total Returns
+
+For companies that pay dividends, shareholders can reinvest the cash which implies we get compounded returns on the dividends.
+
+Returns that include dividends reinvestment are known as *holding period returns* (HPR) or *total returns* 
+
+\begin{equation*}
+
+R^{Tot}_{i,t} = \frac{P_{i,t} - P_{i,t-1} + CF_{i,t}}{P_{i,t-1}} = 
+[\frac{P_{i,t}}{P_{i,t-1}} - 1] + \frac{CF_{i,t} {P_{i,t-1}}
+
+\end{equation*}
+
+So the return is composed by a capital appreciation and a CF yield. On most days price return and total return are the same, since we only have changes on the capital appreciation. For non dividend paying stocks, price return and total return are the same.
+
+But on ex dividends dates price return and total return deviate. The more dividens are paid in the investment horizon, the more changes are in the cumulative returns. 
+
+To account for this providers includes a adjustment for dividend in from of an adjusted close price. 
+
+### Truncating the data
+
+Financial data are often exposed to outliers or extreme values. When this values are more noise than informative analyst remove them from the data. Often a cutoff in for of a Truncation is created that removes data which are greater than a certain i.th percentile (1-i-th). Here the function `quantile()` and `subset()`are often used. 
+
+```{r}
+# We first calculate upper and lower cut-offs with the quantile() function e.g. for 99.5%
+
+upper_cut <- as.numeric(quantile(A1_return_Roche_function, 0.995, na.rm = T))
+lower_cut <- as.numeric(quantile(A1_return_Roche_function, 0.005, na.rm= T))
+
+# We then take the ifelse statement to replace the most extreme values with the upper and lower cut-off scores
+A1_return_Roche_function_cut <- subset(A1_return_Roche_function,
+              A1_return_Roche_function >= lower_cut & A1_return_Roche_function <= upper_cut )
+
+
+```
+
+### Aritmetic vs. Geometric Returns
+
+Arithmetic Returns: Use this when you want the expected return for a one period investment
+Geometric Returns: Use this when you want the cumulative return over an entire investment period
+
+### Cumulative Returns
+
+Using `cumprod()` function from the packages `PerformenceAnalytics` to calculate the cumulative returns we use for assessing the returns  over an entire investment horizont
+
+```{r}
+# First, we need to cap the data set such that the first observation is no longer part of it (as this is a NA).
+
+A1_return_Roche_ts_cap <- A1_return_Roche_function[-1,]
+
+# Then, let's calculate the cumulative returns. To do so, we can use a handy feature of xts objects. By inserting the dates in brackets, we can define from when to when we want to have the analysis (thereby pinning-down a period of interest)
+
+Roche_cum <- cumprod(1 + A1_return_Roche_ts_cap['1988-07-29/2000-12-29']) 
+
+```
+
+Note that this package also has three other handy features: `cumsum()`, `cummin()` and `cummax`. The first calculates the sum of the subsequent returns up to a given date. The latter two calculate the maximum and minimum value of a period up to a certain point.
+
+```{r}
+# Let's calculate the sum, min and max values
+Roche_sum <- cumsum(1 + A1_return_Roche_ts_cap['1988-07-29/2000-12-29'])
+Roche_max <- cummax(A1_return_Roche_ts_cap['1988-07-29/2000-12-29'])
+Roche_min <- cummin(A1_return_Roche_ts_cap['1988-07-29/2000-12-29'])
+
+# Now, let's bind all of them together with the merge.xts function, and create a dataframe and name the columns:
+
+cum_ret_all <- merge.xts(Roche_cum, Roche_sum, Roche_min, Roche_max)
+
+colnames(cum_ret_all) <- c("Roche Cum Prod", "Roche Cum Sum", "Roche Cum Min", "Roche Cum Max")
+
+
+```
+
+We use `cumprod()`to draw returns
+
+
+```{r}
+tidy(Roche_cum) %>% ggplot(aes(x=index,y= value, color=series)) + geom_line() +
+ylab("Cumulative Returns") + xlab("Time") + ggtitle("Cumulative Return of Roche from 1988 to 2000") +
+  labs(color='Cumulative Return') +
+theme(plot.title= element_text(size=14, color="grey26",
+hjust=0.3,lineheight=2.4, margin=margin(15,0,15,45)), 
+panel.background = element_rect(fill="#f7f7f7"),
+panel.grid.major.y = element_line(size = 0.5, linetype = "solid", color = "grey"),
+panel.grid.minor = element_blank(),
+panel.grid.major.x = element_blank(),
+plot.background = element_rect(fill="#f7f7f7", color = "#f7f7f7"), 
+axis.title.y = element_text(color="grey26", size=12, margin=margin(0,10,0,10)),
+axis.title.x = element_text(color="grey26", size=12, margin=margin(10,0,10,0)),
+axis.line = element_line(color = "grey")) 
+
+
+```
+
+### Periodic Transformation of Returns
+
+We have the possibility with xts function to transform function to different periods.
+
+```{r}
+# First, we need to transform the prices data set into different intervals. Note that we have daily prices. 
+Roche_ts_daily <- to.daily(A1_bigfour_ts$Roche_Holding)
+Roche_ts_weekly <- to.weekly(A1_bigfour_ts$Roche_Holding)
+Roche_ts_monthly <- A1_bigfour_ts$Roche_Holding
+Roche_ts_quarterly <- to.quarterly(A1_bigfour_ts$Roche_Holding)
+Roche_ts_yearly <- to.yearly(A1_bigfour_ts$Roche_Holding)
+
+# Then, we can calculate the returns for each periodicity accoringly:
+Roche_ts_daily_ret <- Return.calculate(Roche_ts_daily, method = 'discrete')
+Roche_ts_weekly_ret <- Return.calculate(Roche_ts_weekly, method = 'discrete')
+Roche_ts_monthly_ret <- Return.calculate(Roche_ts_monthly, method = 'discrete')
+Roche_ts_quarterly_ret <- Return.calculate(Roche_ts_quarterly, method = 'discrete')
+Roche_ts_yearly_ret <- Return.calculate(Roche_ts_yearly, method = 'discrete')
+```
+
+### Annualising Returns
+
+Instead of simply transforming time-series into different intervals, we take here periodic returns and calculate what their value would be when shifted to a different periodicity.
+
+The daily to yearly formula for this would be:
+
+$$ R^{Ann}_{i,t} = (1+ R_{i,t})^365 - 1$$
+
+Under the assumption $R_{i,t}$ are daily returns
+
+In general, if we have different periods, we can shift the periodicity by simply taking the n’th power of the underlying return metric, whereas n defines the product of the different periodicities. As such, we get:
+
+Daily to Weekly: n = 7
+Daily to Monthly: n = 30
+Daily to Annual: n = 252 (trading days)
+Weekly to Monthly: n = 4
+Weekly to Annual: n = 52
+Monthly to Annual: n = 12
+
+Also, if you need to convert it into higher frequency, you take the 1/n’th power of the underlying return metric. As such:
+
+Annual to Monthly: 1/n = 1/12 (the rest is analogous)
+
+```{r}
+
+# Get the mean monthly return for Roche
+Roche_mean <- mean(A1_return_Roche_ts_cap['1988-07-29/2000-12-29'])
+
+# Annualise it:
+
+Roche_mean_ann <- (1+ Roche_mean)^12 - 1
+
+#put together
+
+Roche_average_return <- as.data.frame(cbind(Roche_mean, Roche_mean_ann))
+colnames(Roche_average_return) <- c("Roche monthly mean", "Roche monthly mean annual")
+
+# Print it
+round(Roche_average_return)
+
+```
+
+```{r}
+# Delete unnesessary variables to clean enviromental
+# List all objects in the workspace
+objects <- ls()
+
+# Filter objects that begin with "Roche_"
+roche_objects <- objects[grep("^Roche_", objects)]
+
+# Remove these objects
+rm(list = roche_objects)
+
+
+```
+
+## Portfolio Returns
+
+### Equal-weighted Returns
+
+There to possible ways to calculate portfolio returns. Equal-weighted and value-based returns. For equal-weigthed returns implies that in all assets we invest equally. Meaning all assets is invested by 1/N.
+
+This is equivalent to the mean of all security returns:
+
+$$ R_{p,t} = \frac{1}{N} \sum{R_{i,t}} $$
+
+Where $R_{p,t}$ is the portfolio return at time t, $R_{i,t}$ is the security return at time t and N is the number of securities of the portfolio.
+
+If we use this approach, we can easily calculate the mean return with the `rowMeans()` function:
+
+```{r}
+# First, the non matrix algebra solution
+
+## We calculate the returns of all variables
+A1_bf_ret_ts <- xts(Return.calculate(A1_bigfour_ts), order.by = date_bf)
+
+# We delete the first row as this is NA
+A1_bf_ret_ts <- A1_bf_ret_ts[-1,]
+
+## We take the row to get the portfolio return at each period
+bf_EW_ret_ts <- rowMeans(A1_bf_ret_ts, na.rm = T)
+
+## Calculate annualized return for arithmetic value
+bf_EW_ret_mean_ann_ts <- (1 + mean(bf_EW_ret_ts, na.rm= T))^12 -1
+bf_EW_ret_mean_ann_ts
+```
+
+We can derive the same results with matrix multiplication:
+
+$$ R_p = w^T R$$
+
+```{r}
+
+# First we define the average return vector of the securities:
+return_vector <- rowMeans(A1_bf_ret_ts, na.rm = T)
+
+# Then, we can create a vector consisting of average weights. Here, we have seven securities, so each return will be multiplied with 1/7. 
+weight_vector <- rep(1/length(return_vector),each=length(return_vector))
+
+# Now calculate the matrix product:
+mean_return_bigfour <- return_vector %*% weight_vector
+
+# Annualise it:
+bigfour_EW_ret_ts_mean_annual_matmul <- (1+mean_return_bigfour)^12 -1 
+
+# See if it is the same: 
+ifelse(bf_EW_ret_mean_ann_ts == bigfour_EW_ret_ts_mean_annual_matmul, "Both calculations are identical", 0)
+
+
+```
+
+## Value-weighted Returns
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -398,9 +398,8 @@ use the function lag() of the stats package.</p>
 <h2>Security Returns</h2>
 <p>Here we focus on the percentage change in the price of a securities.
 This is called securities return.</p>
-</div>
-<div id="simple-returns" class="section level2">
-<h2>Simple Returns</h2>
+<div id="simple-returns" class="section level3">
+<h3>Simple Returns</h3>
 <p>The daily price return is the percentage change in the price of a
 security today relative to its price yesterday. The formula can be
 written as followed:</p>
@@ -440,7 +439,7 @@ two ways: First, with the formula above, then with the function
 
 ## Manually
 A1_return_Roche_manual &lt;- as.data.frame(A1_bigfour_ts$Roche_Holding / stats::lag(A1_bigfour_ts$Roche_Holding, 1) - 1)
-                # Results will have NA for the first row (since the first element has no previous element to form a return).
+# Results will have NA for the first row (since the first element has no previous element to form a return).
 
 # Third, create xts format with new dataset
 A1_return_Roche_manual_ts &lt;- xts(x = A1_return_Roche_manual, order.by = date_bf)
@@ -456,7 +455,220 @@ ifelse(mean(A1_return_Roche_function, na.rm = TRUE) == mean(A1_return_Roche_manu
 always be a NA value, since there is no lagged parameter for the first
 price. As such, every time we work with data that has missing or NA
 values, we need to modify the calculus by using the argument na.rm =
-TRUE in a specific function</p>
+TRUE in a specific function.</p>
+</div>
+<div id="logarithmic-returns" class="section level3">
+<h3>Logarithmic Returns</h3>
+<p>Log returns are an approx of equal simple returns if volatility
+structure is relativly low (impling no large jumps between periods). We
+know that volatility is higher for riskier assets and longer
+horizont.</p>
+<p><span class="math display">\[ R_{i,t} = log(P_{i,t} - log(P_{i,t-1})
+\]</span></p>
+<p>Advantage on log returns are the are addititive. This means we can
+state the sum of normally distributed will remain normal distributed (if
+they are not correlated). Consequently we can still rely on many
+statistically test that need normal distribution compared to
+multiplicative properties.</p>
+<pre class="r"><code># Let&#39;s calculate the log returns for Roche
+
+## Manualy
+
+A1_log_return_Roche_manual_ts &lt;- xts(log(A1_bigfour_ts$Roche_Holding) - log(stats::lag(A1_bigfour_ts$Roche_Holding,1)), order.by = date_bf)
+
+## With function
+
+A1_log_return_Roche_function_ts &lt;- xts((Return.calculate(A1_bigfour_ts$Roche_Holding, method = &quot;log&quot;)), order.by = date_bf)
+
+# Get the sum to ensure they are the same. We do this by an ifelse statement, stating that if both sums are identical, it prints a 1
+
+ifelse(mean(A1_log_return_Roche_manual_ts, na.rm = T) == mean(A1_log_return_Roche_function_ts, na.rm = T), &quot;Both calculation identical&quot;,0)</code></pre>
+<pre><code>## [1] &quot;Both calculation identical&quot;</code></pre>
+<pre class="r"><code># We can also compare both simple and log returns:
+# Combine row of the vectors
+
+Roche_log_simple = as.data.frame(
+  rbind(mean(A1_return_Roche_manual_ts, na.rm = T), mean(A1_log_return_Roche_manual_ts, na.rm = T))
+)
+
+# Define columnnames and rownames
+colnames(Roche_log_simple) = c(&quot;Return Roche&quot;)
+rownames(Roche_log_simple) = c(&quot;Mean Return Simple&quot;, &quot;Mean Return Log&quot;)
+
+Roche_log_simple</code></pre>
+<pre><code>##                    Return Roche
+## Mean Return Simple  0.009988026
+## Mean Return Log     0.008377684</code></pre>
+</div>
+<div id="accounting-for-dividents-total-returns" class="section level3">
+<h3>Accounting for Dividents: Total Returns</h3>
+<p>For companies that pay dividends, shareholders can reinvest the cash
+which implies we get compounded returns on the dividends.</p>
+<p>Returns that include dividends reinvestment are known as <em>holding
+period returns</em> (HPR) or <em>total returns</em></p>
+<p><span class="math display">\[\begin{equation*}
+
+R^{Tot}_{i,t} = \frac{P_{i,t} - P_{i,t-1} + CF_{i,t}}{P_{i,t-1}} =
+[\frac{P_{i,t}}{P_{i,t-1}} - 1] + \frac{CF_{i,t} {P_{i,t-1}}
+
+\end{equation*}\]</span></p>
+<p>So the return is composed by a capital appreciation and a CF yield.
+On most days price return and total return are the same, since we only
+have changes on the capital appreciation. For non dividend paying
+stocks, price return and total return are the same.</p>
+<p>But on ex dividends dates price return and total return deviate. The
+more dividens are paid in the investment horizon, the more changes are
+in the cumulative returns.</p>
+<p>To account for this providers includes a adjustment for dividend in
+from of an adjusted close price.</p>
+</div>
+<div id="truncating-the-data" class="section level3">
+<h3>Truncating the data</h3>
+<p>Financial data are often exposed to outliers or extreme values. When
+this values are more noise than informative analyst remove them from the
+data. Often a cutoff in for of a Truncation is created that removes data
+which are greater than a certain i.th percentile (1-i-th). Here the
+function <code>quantile()</code> and <code>subset()</code>are often
+used.</p>
+<pre class="r"><code># We first calculate upper and lower cut-offs with the quantile() function e.g. for 99.5%
+
+upper_cut &lt;- as.numeric(quantile(A1_return_Roche_function, 0.995, na.rm = T))
+lower_cut &lt;- as.numeric(quantile(A1_return_Roche_function, 0.005, na.rm= T))
+
+# We then take the ifelse statement to replace the most extreme values with the upper and lower cut-off scores
+A1_return_Roche_function_cut &lt;- subset(A1_return_Roche_function,
+              A1_return_Roche_function &gt;= lower_cut &amp; A1_return_Roche_function &lt;= upper_cut )</code></pre>
+</div>
+<div id="aritmetic-vs.-geometric-returns" class="section level3">
+<h3>Aritmetic vs. Geometric Returns</h3>
+<p>Arithmetic Returns: Use this when you want the expected return for a
+one period investment Geometric Returns: Use this when you want the
+cumulative return over an entire investment period</p>
+</div>
+<div id="cumulative-returns" class="section level3">
+<h3>Cumulative Returns</h3>
+<p>Using <code>cumprod()</code> function from the packages
+<code>PerformenceAnalytics</code> to calculate the cumulative returns we
+use for assessing the returns over an entire investment horizont</p>
+<pre class="r"><code># First, we need to cap the data set such that the first observation is no longer part of it (as this is a NA).
+
+A1_return_Roche_ts_cap &lt;- A1_return_Roche_function[-1,]
+
+# Then, let&#39;s calculate the cumulative returns. To do so, we can use a handy feature of xts objects. By inserting the dates in brackets, we can define from when to when we want to have the analysis (thereby pinning-down a period of interest)
+
+Roche_cum &lt;- cumprod(1 + A1_return_Roche_ts_cap[&#39;1988-07-29/2000-12-29&#39;]) </code></pre>
+<p>Note that this package also has three other handy features:
+<code>cumsum()</code>, <code>cummin()</code> and <code>cummax</code>.
+The first calculates the sum of the subsequent returns up to a given
+date. The latter two calculate the maximum and minimum value of a period
+up to a certain point.</p>
+<pre class="r"><code># Let&#39;s calculate the sum, min and max values
+Roche_sum &lt;- cumsum(1 + A1_return_Roche_ts_cap[&#39;1988-07-29/2000-12-29&#39;])
+Roche_max &lt;- cummax(A1_return_Roche_ts_cap[&#39;1988-07-29/2000-12-29&#39;])
+Roche_min &lt;- cummin(A1_return_Roche_ts_cap[&#39;1988-07-29/2000-12-29&#39;])
+
+# Now, let&#39;s bind all of them together with the merge.xts function, and create a dataframe and name the columns:
+
+cum_ret_all &lt;- merge.xts(Roche_cum, Roche_sum, Roche_min, Roche_max)
+
+colnames(cum_ret_all) &lt;- c(&quot;Roche Cum Prod&quot;, &quot;Roche Cum Sum&quot;, &quot;Roche Cum Min&quot;, &quot;Roche Cum Max&quot;)</code></pre>
+<p>We use <code>cumprod()</code>to draw returns</p>
+<pre class="r"><code>tidy(Roche_cum) %&gt;% ggplot(aes(x=index,y= value, color=series)) + geom_line() +
+ylab(&quot;Cumulative Returns&quot;) + xlab(&quot;Time&quot;) + ggtitle(&quot;Cumulative Return of Roche from 1988 to 2000&quot;) +
+  labs(color=&#39;Cumulative Return&#39;) +
+theme(plot.title= element_text(size=14, color=&quot;grey26&quot;,
+hjust=0.3,lineheight=2.4, margin=margin(15,0,15,45)), 
+panel.background = element_rect(fill=&quot;#f7f7f7&quot;),
+panel.grid.major.y = element_line(size = 0.5, linetype = &quot;solid&quot;, color = &quot;grey&quot;),
+panel.grid.minor = element_blank(),
+panel.grid.major.x = element_blank(),
+plot.background = element_rect(fill=&quot;#f7f7f7&quot;, color = &quot;#f7f7f7&quot;), 
+axis.title.y = element_text(color=&quot;grey26&quot;, size=12, margin=margin(0,10,0,10)),
+axis.title.x = element_text(color=&quot;grey26&quot;, size=12, margin=margin(10,0,10,0)),
+axis.line = element_line(color = &quot;grey&quot;)) </code></pre>
+<pre><code>## Warning: The `size` argument of `element_line()` is deprecated as of ggplot2 3.4.0.
+## ℹ Please use the `linewidth` argument instead.
+## This warning is displayed once every 8 hours.
+## Call `lifecycle::last_lifecycle_warnings()` to see where this warning was
+## generated.</code></pre>
+<p><img src="data:image/png;base64,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" width="672" /></p>
+</div>
+<div id="periodic-transformation-of-returns" class="section level3">
+<h3>Periodic Transformation of Returns</h3>
+<p>We have the possibility with xts function to transform function to
+different periods.</p>
+<pre class="r"><code># First, we need to transform the prices data set into different intervals. Note that we have daily prices. 
+Roche_ts_daily &lt;- to.daily(A1_bigfour_ts$Roche_Holding)
+Roche_ts_weekly &lt;- to.weekly(A1_bigfour_ts$Roche_Holding)
+Roche_ts_monthly &lt;- A1_bigfour_ts$Roche_Holding
+Roche_ts_quarterly &lt;- to.quarterly(A1_bigfour_ts$Roche_Holding)
+Roche_ts_yearly &lt;- to.yearly(A1_bigfour_ts$Roche_Holding)
+
+# Then, we can calculate the returns for each periodicity accoringly:
+Roche_ts_daily_ret &lt;- Return.calculate(Roche_ts_daily, method = &#39;discrete&#39;)
+Roche_ts_weekly_ret &lt;- Return.calculate(Roche_ts_weekly, method = &#39;discrete&#39;)
+Roche_ts_monthly_ret &lt;- Return.calculate(Roche_ts_monthly, method = &#39;discrete&#39;)
+Roche_ts_quarterly_ret &lt;- Return.calculate(Roche_ts_quarterly, method = &#39;discrete&#39;)
+Roche_ts_yearly_ret &lt;- Return.calculate(Roche_ts_yearly, method = &#39;discrete&#39;)</code></pre>
+</div>
+<div id="annualising-returns" class="section level3">
+<h3>Annualising Returns</h3>
+<p>Instead of simply transforming time-series into different intervals,
+we take here periodic returns and calculate what their value would be
+when shifted to a different periodicity.</p>
+<p>The daily to yearly formula for this would be:</p>
+<p><span class="math display">\[ R^{Ann}_{i,t} = (1+ R_{i,t})^365 -
+1\]</span></p>
+<p>Under the assumption <span class="math inline">\(R_{i,t}\)</span> are
+daily returns</p>
+<p>In general, if we have different periods, we can shift the
+periodicity by simply taking the n’th power of the underlying return
+metric, whereas n defines the product of the different periodicities. As
+such, we get:</p>
+<p>Daily to Weekly: n = 7 Daily to Monthly: n = 30 Daily to Annual: n =
+252 (trading days) Weekly to Monthly: n = 4 Weekly to Annual: n = 52
+Monthly to Annual: n = 12</p>
+<p>Also, if you need to convert it into higher frequency, you take the
+1/n’th power of the underlying return metric. As such:</p>
+<p>Annual to Monthly: 1/n = 1/12 (the rest is analogous)</p>
+<pre class="r"><code># Get the mean monthly return for Roche
+Roche_mean &lt;- mean(A1_return_Roche_ts_cap[&#39;1988-07-29/2000-12-29&#39;])
+
+# Annualise it:
+
+Roche_mean_ann &lt;- (1+ Roche_mean)^12 - 1
+
+#put together
+
+Roche_average_return &lt;- as.data.frame(cbind(Roche_mean, Roche_mean_ann))
+colnames(Roche_average_return) &lt;- c(&quot;Roche monthly mean&quot;, &quot;Roche monthly mean annual&quot;)
+
+# Print it
+round(Roche_average_return)</code></pre>
+<pre><code>##   Roche monthly mean Roche monthly mean annual
+## 1                  0                         0</code></pre>
+<pre class="r"><code># Delete unnesessary variables to clean enviromental
+# List all objects in the workspace
+objects &lt;- ls()
+
+# Filter objects that begin with &quot;Roche_&quot;
+roche_objects &lt;- objects[grep(&quot;^Roche_&quot;, objects)]
+
+# Remove these objects
+rm(list = roche_objects)</code></pre>
+</div>
+</div>
+<div id="portfolio-returns" class="section level2">
+<h2>Portfolio Returns</h2>
+<div id="equal-weighted-returns" class="section level3">
+<h3>Equal-weighted Returns</h3>
+<p>There to possible ways to calculate portfolio returns. Equal-weighted
+and value-based returns. For equal-weigthed returns implies that in all
+assets we invest equally. Meaning all assets is invested by 1/N.</p>
+<p>This is equivalent to the mean of all security returns:</p>
+<p><span class="math display">\[ R_{p,t} = \frac{1}{N} \sum{R_{p,t}}
+\]</span></p>
+</div>
 </div>
 </div>
 
