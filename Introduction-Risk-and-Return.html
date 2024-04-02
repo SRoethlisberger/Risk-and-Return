@@ -663,12 +663,72 @@ rm(list = roche_objects)</code></pre>
 <div id="equal-weighted-returns" class="section level3">
 <h3>Equal-weighted Returns</h3>
 <p>There to possible ways to calculate portfolio returns. Equal-weighted
-and value-based returns. For equal-weigthed returns implies that in all
-assets we invest equally. Meaning all assets is invested by 1/N.</p>
+and value-based returns. For equal-weigthed (EW) returns implies that in
+all assets we invest equally. Meaning all assets is invested by 1/N.</p>
 <p>This is equivalent to the mean of all security returns:</p>
-<p><span class="math display">\[ R_{p,t} = \frac{1}{N} \sum{R_{p,t}}
+<p><span class="math display">\[ R_{p,t} = \frac{1}{N} \sum{R_{i,t}}
 \]</span></p>
+<p>Where <span class="math inline">\(R_{p,t}\)</span> is the portfolio
+return at time t, <span class="math inline">\(R_{i,t}\)</span> is the
+security return at time t and N is the number of securities of the
+portfolio.</p>
+<p>If we use this approach, we can easily calculate the mean return with
+the <code>rowMeans()</code> function:</p>
+<pre class="r"><code># First, the non matrix algebra solution
+
+## We calculate the returns of all variables
+A1_bf_ret_ts &lt;- xts(Return.calculate(A1_bigfour_ts), order.by = date_bf)
+
+# We delete the first row as this is NA
+A1_bf_ret_ts &lt;- A1_bf_ret_ts[-1,]
+
+## We take the row to get the portfolio return at each period
+bf_EW_ret_ts &lt;- rowMeans(A1_bf_ret_ts, na.rm = T)
+
+## Calculate annualized return for arithmetic value
+bf_EW_ret_mean_ann_ts &lt;- (1 + mean(bf_EW_ret_ts, na.rm= T))^12 -1
+bf_EW_ret_mean_ann_ts</code></pre>
+<pre><code>## [1] 0.1027313</code></pre>
+<p>We can derive the same results with matrix multiplication:</p>
+<p><span class="math display">\[ R_p = w^T R\]</span></p>
+<pre class="r"><code># First we define the average return vector of the securities:
+return_vector &lt;- rowMeans(A1_bf_ret_ts, na.rm = T)
+
+# Then, we can create a vector consisting of average weights. Here, we have seven securities, so each return will be multiplied with 1/7. 
+weight_vector &lt;- rep(1/length(return_vector),each=length(return_vector))
+
+# Now calculate the matrix product:
+mean_return_bigfour &lt;- return_vector %*% weight_vector
+
+# Annualise it:
+bigfour_EW_ret_ts_mean_annual_matmul &lt;- (1+mean_return_bigfour)^12 -1 
+
+# See if it is the same: 
+ifelse(bf_EW_ret_mean_ann_ts == bigfour_EW_ret_ts_mean_annual_matmul, &quot;Both calculations are identical&quot;, 0)</code></pre>
+<pre><code>##      [,1]                             
+## [1,] &quot;Both calculations are identical&quot;</code></pre>
 </div>
+</div>
+<div id="value-weighted-returns" class="section level2">
+<h2>Value-weighted Returns</h2>
+<p>Other than equal-weighted returns we account here for the company
+size when evaluating the portfolio performance. A value-weighted (VW)
+portfolio invests capital in proportion to the market capitalization of
+the securities in the portfolio. This means the bigger the company the
+more will be invested in it.</p>
+<p>In VW strategies we use <em>past weights</em> because we do not know
+the market capitalization of a securities on time t, as the retun of all
+securities is not known. Only with the assumption of perfect forecasting
+we could calculate the actual weights. But this is unrealistic and is
+called look-ahead bias. Therefore we use weights just one period before
+the rebalancing.</p>
+<p>The <em>market capitalization</em> is calculated</p>
+<p><span class="math display">\[ MC_{i,t} = P_{i,t} * SHROUT_{i,t}
+\]</span></p>
+<p>Whereas <span class="math inline">\(P_{i,t}\)</span> is the price of
+security i at time t, <span class="math inline">\(SHROUT_{i,t}\)</span>
+are the outstanding shares and <span class="math inline">\(MC_{i,t}\)</span> is the market capitalization of
+security i on time t.</p>
 </div>
 </div>
 

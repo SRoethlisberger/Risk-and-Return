@@ -380,7 +380,7 @@ rm(list = roche_objects)
 
 ### Equal-weighted Returns
 
-There to possible ways to calculate portfolio returns. Equal-weighted and value-based returns. For equal-weigthed returns implies that in all assets we invest equally. Meaning all assets is invested by 1/N.
+There to possible ways to calculate portfolio returns. Equal-weighted and value-based returns. For equal-weigthed (EW) returns implies that in all assets we invest equally. Meaning all assets is invested by 1/N.
 
 This is equivalent to the mean of all security returns:
 
@@ -433,19 +433,166 @@ ifelse(bf_EW_ret_mean_ann_ts == bigfour_EW_ret_ts_mean_annual_matmul, "Both calc
 
 ## Value-weighted Returns
 
+Other than equal-weighted returns we account here for the company size when evaluating the portfolio performance. A value-weighted  (VW) portfolio invests capital in proportion to the market capitalization of the securities in the portfolio. This means the bigger the company the more will be invested in it.
+
+In VW strategies we use *past weights* because we do not know the market capitalization of a securities on time t, as the retun of all securities is not known. Only with the assumption of perfect forecasting we could calculate the actual weights. But this is unrealistic and is called look-ahead bias. Therefore we use weights just one period before the rebalancing. 
+
+The *market capitalization* is calculated
+
+$$ MC_{i,t} = P_{i,t} * SHROUT_{i,t} $$
+
+Whereas $P_{i,t}$ is the price of security i at time t, $SHROUT_{i,t}$ are the outstanding shares and  $MC_{i,t}$ is the market capitalization of security i on time t.
 
 
 
 
 
+```{r}
+# Calculate VW
+
+#load dataset
+A4_bigfour <- read.csv("C:/Users/steph/Documents/Programmiersprache/Github/Data/A1_bigfour_Ex_real.csv", header = T, sep = ",",  dec = '.')
+
+# Overview of dataset
+#head(A4_bigfour)
+
+# Define date as as.date() format
+# Use dmy() if there are problems
+date_bf <- as.Date(dmy(A4_bigfour$Date))
+                  
+# Change to xts format
+A4ts_bf <- xts(A4_bigfour[,-1], order.by = date_bf)
+
+# Calculation of market capitalization of portfolio
+A4_marketcap <- rowSums(A4ts_bf, na.rm = T)
+
+# Calculate individual weights
+A4_weights <- A4ts_bf / A4_marketcap
+
+# lag the weights for one time period to avoid look-ahead bias
+A4_weights_lag <- stats::lag(A4_weights, 1)
+
+# Calculate the returns
+A4ts_ret_bf <- Return.calculate(A4ts_bf, method = "discrete")
+
+
+# Calculate VW
+A4_VW_return <- A4_weights_lag * A4ts_ret_bf
+
+## Now we sum this across all stock to get the portfolio return 
+#(rowSums()) since we already have the proportionally weighted returns, now their sum will deliver the actual VW return
+A4_Return_VW_PF <- rowSums(A4_VW_return, na.rm = T)
+
+# Define another date object
+date_bf_A4 = as.Date(dmy(A4_bigfour[-1,1]))
+
+## Create xts object with correct number of dimensions
+bigfour_VW_ret_ts <- xts(A4_Return_VW_PF, order.by = date_bf)
+
+```
+
+Now we can compare EW with VW
+
+```{r}
+# Control if EW object a xts format has
+bf_EW_ret_ts <- xts(bf_EW_ret_ts, order.by = date_bf_A4)
+# calculate the cumulative returns with cumprod()
+bf_EW_ret_ts_cum <- cumprod(1+ bf_EW_ret_ts['1988-07-29/2000-12-29'])
+bf_VW_ret_ts_cum <- cumprod(1+ bigfour_VW_ret_ts['1988-07-29/2000-12-29'])
+
+# Get the data merge
+cum_ret_EW_VW_bf <- merge.xts(bf_EW_ret_ts_cum, bf_VW_ret_ts_cum)
+
+# Change the name of the columns
+colnames(cum_ret_EW_VW_bf) <- c("Value-Weighted Return", "Equal-weighted Return")
+
+
+# Plot it
+tidy(cum_ret_EW_VW_bf) %>% ggplot(aes(x=index,y= value, color=series)) +
+  geom_line(na.rm = TRUE) +
+   scale_color_manual(values=c("goldenrod", "dodgerblue4",
+                               "dodgerblue1", "darkorchid4")) + 
+ylab("Cumulative Returns") + xlab("Time") + 
+  ggtitle("Cumulative Return of the Big Four from 1988 to 2000") +
+  labs(color='Cumulative Return') +
+theme(plot.title= element_text(size=14, color="grey26",
+hjust=0.3,lineheight=2.4, margin=margin(15,0,15,45)), 
+panel.background = element_rect(fill="#f7f7f7"),
+panel.grid.major.y = element_line(size = 0.5, linetype = "solid", color = "grey"),
+panel.grid.minor = element_blank(),
+panel.grid.major.x = element_blank(),
+plot.background = element_rect(fill="#f7f7f7", color = "#f7f7f7"), 
+axis.title.y = element_text(color="grey26", size=12, margin=margin(0,10,0,10)),
+axis.title.x = element_text(color="grey26", size=12, margin=margin(10,0,10,0)),
+axis.line = element_line(color = "grey")) 
+
+
+```
+
+### Timing Returns
+
+An importent property in investing is the timing characteristic. Depending when you invest the cumulative returns are different. For instance, e.g. if you had invested befor the finance crisis the time needed for getting a positive investment is different then when you had invested after the crisis. 
+
+
+```{r, include=FALSE}
+
+# Just to have the next code right
+bigfour_EW_ret_ts <- bf_EW_ret_ts
+bigfour_VW_ret_ts<- bigfour_VW_ret_ts
+
+```
 
 
 
+```{r}
+
+# Let's create the cum return series for both value- and equal-weighted portfolios of the big four. 
+cum_ret_EW_Financial <- cumprod(1 + bigfour_EW_ret_ts['2007-06-01/2021-02-26'])
+cum_ret_VW_Financial <- cumprod(1 + bigfour_VW_ret_ts['2007-06-01/2021-02-26'])
+
+# This command reports all values which were in this time above 1, so higher than the initial return on the beginning of the financial crisis 
+EW_Positive_After_Financial <- subset(cum_ret_EW_Financial, cum_ret_EW_Financial >= 1)
+VW_Positive_After_Financial <- subset(cum_ret_VW_Financial, cum_ret_EW_Financial >= 1)
+
+# This command returns the first of said values 
+EW_First_Positive_After_Financial <- EW_Positive_After_Financial[c(1:2),1]
+VW_First_Positive_After_Financial <- VW_Positive_After_Financial[c(1:2),1]
+
+# Then, we get the dates for both returns
+print(paste0("When investing just before the Financial Crisis, the EW Big Four portfolio reaches its first positive return on ", as.Date(as.POSIXct(EW_Positive_After_Financial[1,0])),
+             ". When investing just before the Financial Crisis, the VW Big Four portfolio reaches its first positive return on ", as.Date(as.POSIXct(VW_Positive_After_Financial[1,0]))))
+
+```
+
+### Nominal vs Real Returns
+
+The concept of inflation plays an important role in asset management. Inflation is regarded as a hidden cost variable, since it indirectly reduces the overall return by adding a factor for price developments. In other words, inflation decides how much worth your money has, to put it bluntly. If inflation is positive, then prices increase and, as such, for CHF 1.- you can consume less. On the other hand, if inflation is negative, then CHF 1.- can get you a higher consumption and thus is worth more.
+
+Since Inflation is not measurable directly we need a proxy. Here we can use *Consumer Price Index data*.The CPI measures the change of prices of good and services which are representative in the private households consumption (despite the variation in prices).
+
+Consequently, by analysing the CPI, we can proxy the inflation in Switzerland. To do so, we need to calculate the inflation.
+
+$$ Inflation_{i,t} = \frac{CPI{i,t}}{CPI{i,t-1}-1$$
+
+Whereas $Inflation_{i,t}$ is the inflation of country i at time t, and $CPI{i,t}$ is the consumer price index in country i at time t (or t-1). 
+
+Using CPI adjustment is important to understand the difference between nominal returns and real returns.
+The *nominal return* on an investment is the money made without factoring expenses, such as inflation, taxes, and fees.
+The *real return* on an investment is the return made on an investment after subtracting costs, such as inflation, taxes, and fees.
+
+The relation between nominal and real return can be written as followed:
+
+$$R^{Real}_{p,t} = \frac{1 + R_{p,t}} {1 + Inflation{i,t}} - 1 $$
+
+Whereas $R_{p,t}$ is the nominal return of the portfolio on time t, $R^{Real}_{p,t}$ is the real return of the porfolio on time t and $Inflation{i,t}$ is the inflation rate of country i on time t. 
+
+To understand how inflation works in our asset management setting, it is important to calculate and visualize the different portfolio returns.
+
+```{r}
+#load
+CPI_data <- read.csv("C:/Users/steph/Documents/Programmiersprache/Github/Data/A2_dataset_05.txt", header = T, sep = "\t",  dec = '.')
 
 
-
-
-
-
+```
 
 
